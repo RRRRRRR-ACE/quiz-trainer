@@ -152,25 +152,19 @@
       <div class="row">
         <label>单选题</label>
         <input type="number" id="n-single" value="20" min="0" max="999">
-        <span class="cap">题，每题</span>
-        <input type="number" id="p-single" value="1" min="1" max="100">
-        <span class="cap">分</span>
+        <span class="cap">题（每题 2 分）</span>
         <span class="avail" id="avail-single"></span>
       </div>
       <div class="row">
         <label>多选题</label>
         <input type="number" id="n-multi" value="10" min="0" max="999">
-        <span class="cap">题，每题</span>
-        <input type="number" id="p-multi" value="2" min="1" max="100">
-        <span class="cap">分</span>
+        <span class="cap">题（每题 2 分）</span>
         <span class="avail" id="avail-multi"></span>
       </div>
       <div class="row">
         <label>判断题</label>
         <input type="number" id="n-judge" value="20" min="0" max="999">
-        <span class="cap">题，每题</span>
-        <input type="number" id="p-judge" value="1" min="1" max="100">
-        <span class="cap">分</span>
+        <span class="cap">题（每题 2 分）</span>
         <span class="avail" id="avail-judge"></span>
       </div>
       <div class="row nick-row">
@@ -284,13 +278,13 @@ function counts(){
   return {'单选题': +$('n-single').value || 0, '多选题': +$('n-multi').value || 0, '判断题': +$('n-judge').value || 0};
 }
 function points(){
-  return {'单选题': +$('p-single').value || 1, '多选题': +$('p-multi').value || 1, '判断题': +$('p-judge').value || 1};
+  return {'单选题': 2, '多选题': 2, '判断题': 2};
 }
 function updateTotal(){
   const c = counts(), p = points();
   let n = 0, s = 0;
   for (const t of TYPE_ORDER){ n += c[t]; s += c[t] * p[t]; }
-  $('total').textContent = `共 ${n} 题，满分 ${s} 分`;
+  $('total').textContent = `共 ${n} 题（每题 2 分），满分 ${s} 分`;
 }
 function show(view){
   for (const v of ['view-setup','view-quiz','view-result','view-answers','view-records','view-all']){
@@ -513,7 +507,7 @@ BANK = BANK_DATA;
   if (location.hash === '#answers') openAnswers();
 })();
 
-['n-single','p-single','n-multi','p-multi','n-judge','p-judge'].forEach(id => {
+['n-single','n-multi','n-judge'].forEach(id => {
   $(id).addEventListener('input', updateTotal);
 });
 $('btn-start').addEventListener('click', start);
