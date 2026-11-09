@@ -259,12 +259,14 @@
 
 
   <section id="view-wrongset" class="card hidden">
-    <h2>错题集 · 按错误次数排</h2>
-    <div class="ans-tools">
-      <span class="ans-count" id="wrongset-count" style="margin-left:0">还没有错题</span>
-      <button id="btn-review-start" class="primary" style="margin-left:auto">开始错题复习</button>
-      <button id="btn-wrongset-back">返回设置</button>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px">
+      <h2 style="margin:0">错题集 · 按错误次数排</h2>
+      <div style="margin-left:auto; display:flex; gap:10px">
+        <button id="btn-review-start" class="primary">开始错题复习</button>
+        <button id="btn-wrongset-back">返回设置</button>
+      </div>
     </div>
+    <p class="src" style="margin:0 0 14px" id="wrongset-count">还没有错题</p>
     <div id="wrongset-list"></div>
   </section>
 
