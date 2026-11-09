@@ -122,6 +122,20 @@
     .stem{font-size:16px}
     .score .big{font-size:26px}
   }
+
+  .all-table{width:100%; border-collapse:collapse; font-size:14px}
+  .all-table th,.all-table td{padding:8px 10px; border-bottom:1px solid var(--line); text-align:left}
+  .all-table th{color:var(--navy); background:#eef4fb}
+  .all-table td.num{text-align:center}
+  .rec-wrong{margin-top:10px; padding:10px 12px; background:#f7fafd; border-radius:8px; border:1px dashed var(--line)}
+  .rec-wrong .q{font-weight:bold; color:var(--navy); margin-bottom:4px}
+  .rec-wrong .opt-line{font-size:13px; color:var(--gray); padding-left:2px}
+  .rec-wrong .opt-line.right{color:var(--ok)}
+  .rec-wrong .opt-line.mine-wrong{color:var(--bad)}
+  .rec-wrong .ans{font-size:13px; margin-top:4px}
+  .rec-wrong .mine{color:var(--bad)}
+  .rec-wrong .right-ans{color:var(--ok)}
+  .nick-row input{flex:1; min-width:140px; padding:6px 8px; border:1px solid #cfd8e3; border-radius:8px; font-size:15px; font-family:inherit; color:var(--gray)}
 </style>
 </head>
 <body>
@@ -157,11 +171,18 @@
         <span class="cap">分</span>
         <span class="avail" id="avail-judge"></span>
       </div>
+      <div class="row nick-row">
+        <label>昵称</label>
+        <input id="nickname" placeholder="不填就是「匿名同学」">
+        <span class="cap">只显示在「全部记录」里</span>
+      </div>
     </div>
     <p class="total" id="total"></p>
     <div class="nav">
       <button id="btn-start" class="primary">开始答题</button>
       <button id="btn-answers" class="ghost">答案速查（学习模式）</button>
+      <button id="btn-records" class="ghost">我的记录</button>
+      <button id="btn-all" class="ghost">全部记录</button>
     </div>
   </section>
 
@@ -212,6 +233,31 @@
     </div>
   </section>
 
+
+  <section id="view-records" class="card hidden">
+    <h2>我的做题记录</h2>
+    <div class="ans-tools">
+      <span class="ans-count" id="rec-count"></span>
+      <button id="btn-clear-rec" class="ghost" style="margin-left:auto">清空记录</button>
+    </div>
+    <div id="rec-list"></div>
+    <div class="nav"><button id="btn-rec-back" class="primary">返回设置</button></div>
+  </section>
+
+  <section id="view-all" class="card hidden">
+    <h2>全部记录 · 大家做了多少</h2>
+    <p class="src" style="margin:-6px 0 12px">免费服务只保留最近 12 小时的数据，每天看都是当天的。</p>
+    <div class="ans-tools">
+      <span class="ans-count" id="all-count">加载中…</span>
+      <button id="btn-refresh" class="ghost" style="margin-left:auto">刷新</button>
+    </div>
+    <div id="all-list"></div>
+    <div class="nav">
+      <button id="btn-my-rec" class="ghost">看我的记录</button>
+      <button id="btn-all-back" class="primary">返回设置</button>
+    </div>
+  </section>
+
   <p class="foot">人工智能训练师（四级）理论题库 · 677 道 · 本地运行，不联网</p>
 </div>
 
@@ -244,7 +290,7 @@ function updateTotal(){
   $('total').textContent = `共 ${n} 题，满分 ${s} 分`;
 }
 function show(view){
-  for (const v of ['view-setup','view-quiz','view-result','view-answers']){
+  for (const v of ['view-setup','view-quiz','view-result','view-answers','view-records','view-all']){
     $(v).classList.toggle('hidden', v !== view);
   }
 }
@@ -450,6 +496,165 @@ $('ans-search').addEventListener('input', () => {
   clearTimeout(window.__ansTimer);
   window.__ansTimer = setTimeout(applyAnsFilter, 250);
 });
+
+// ================= 做题记录 =================
+const REC_KEY = 'quiz-records-v1';
+const CID_KEY = 'quiz-cid';
+const NICK_KEY = 'quiz-nickname';
+const NTFY_TOPIC = 'xiaoyu-quiz-l4-2026';
+
+function getCid(){
+  let cid = localStorage.getItem(CID_KEY);
+  if (!cid){ cid = 'u' + Math.random().toString(36).slice(2, 10); localStorage.setItem(CID_KEY, cid); }
+  return cid;
+}
+function loadRecords(){
+  try { return JSON.parse(localStorage.getItem(REC_KEY) || '[]'); } catch(e){ return []; }
+}
+function saveRecords(arr){ localStorage.setItem(REC_KEY, JSON.stringify(arr.slice(0, 50))); }
+function addRecord(rec){
+  const arr = loadRecords();
+  arr.unshift(rec);
+  saveRecords(arr);
+}
+function fmtTime(ts){
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function reportScore(rec){
+  const cid = getCid();
+  const name = (localStorage.getItem(NICK_KEY) || '').trim() || '匿名同学';
+  const payload = { c: cid, n: name, s: rec.score, t: rec.total, ts: rec.ts };
+  fetch('https://ntfy.sh/' + NTFY_TOPIC, { method: 'POST', body: JSON.stringify(payload) }).catch(() => {});
+}
+function wrongHtml(w){
+  let html = `<div class="q">[${w.type}] ${escapeHtml(w.stem)}</div>`;
+  for (const [letter, text] of w.options){
+    const isRight = w.answer.includes(letter);
+    const isMine = w.mine.includes(letter);
+    let cls = 'opt-line';
+    if (isRight) cls += ' right';
+    else if (isMine) cls += ' mine-wrong';
+    html += `<div class="${cls}">${letter}. ${escapeHtml(text)}</div>`;
+  }
+  html += `<div class="ans">你的答案：<span class="mine">${w.mine || '（未作答）'}</span>　正确答案：<span class="right-ans">${w.answer}</span></div>`;
+  return html;
+}
+function renderRecords(){
+  const arr = loadRecords();
+  const box = $('rec-list');
+  box.innerHTML = '';
+  $('rec-count').textContent = arr.length ? `共 ${arr.length} 次记录（最多保留 50 次）` : '还没有记录，先去做一轮吧';
+  if (!arr.length) return;
+  arr.forEach((rec, i) => {
+    const div = document.createElement('div');
+    div.className = 'ans-item';
+    const pct = rec.total ? Math.round(rec.score / rec.total * 100) : 0;
+    let html = `<div class="q"><span class="no">${arr.length - i}.</span> ${fmtTime(rec.ts)}　${rec.score} / ${rec.total} 分（${rec.right}/${rec.count} 题，${pct}%）</div>`;
+    html += `<div class="key">错题 ${rec.wrong.length} 道　<button class="ghost" data-idx="${i}" style="padding:2px 10px;font-size:12px">点开看错题</button></div>`;
+    html += `<div class="rec-wrong hidden" id="rec-wrong-${i}">${rec.wrong.map(wrongHtml).join('') || '<p class="empty">这一轮全对</p>'}</div>`;
+    div.innerHTML = html;
+    box.appendChild(div);
+  });
+  box.querySelectorAll('button[data-idx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const el = document.getElementById('rec-wrong-' + btn.dataset.idx);
+      el.classList.toggle('hidden');
+      btn.textContent = el.classList.contains('hidden') ? '点开看错题' : '收起';
+    });
+  });
+}
+function openRecords(){
+  renderRecords();
+  show('view-records');
+}
+async function loadAllRecords(){
+  const box = $('all-list');
+  box.innerHTML = '<p class="empty">正在加载…</p>';
+  $('all-count').textContent = '加载中…';
+  try {
+    const r = await fetch('https://ntfy.sh/' + NTFY_TOPIC + '/json?poll=1&since=all', { cache: 'no-store' });
+    const text = await r.text();
+    const msgs = [];
+    text.trim().split('\n').forEach(line => {
+      if (!line) return;
+      try { const m = JSON.parse(line); if (m.event === 'message') msgs.push(m); } catch(e){}
+    });
+    const users = {};
+    msgs.forEach(m => {
+      try {
+        const d = JSON.parse(m.message);
+        if (!d.c) return;
+        const u = users[d.c] || (users[d.c] = { name: d.n || '匿名同学', count: 0, best: 0, last: 0, lastTs: 0, total: d.t || 0, lastTs2: 0 });
+        u.count++;
+        u.last = d.s;
+        u.total = d.t || u.total;
+        const ts = d.ts || 0;
+        if (ts >= u.lastTs) { u.lastTs = ts; if (d.n) u.name = d.n; }
+        if (d.s > u.best) u.best = d.s;
+      } catch(e){}
+    });
+    const list = Object.values(users).sort((a, b) => b.best - a.best);
+    if (!list.length){
+      box.innerHTML = '<p class="empty">最近 12 小时还没有人做题，去做第一个吧。</p>';
+      $('all-count').textContent = '0 人';
+      return;
+    }
+    $('all-count').textContent = `最近 12 小时：${list.length} 人，共 ${msgs.length} 次记录`;
+    let html = '<table class="all-table"><thead><tr><th>昵称</th><th class="num">次数</th><th class="num">最高分</th><th class="num">最近一次</th></tr></thead><tbody>';
+    list.forEach(u => {
+      html += `<tr><td>${escapeHtml(u.name)}</td><td class="num">${u.count}</td><td class="num">${u.best}</td><td class="num">${u.last}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    box.innerHTML = html;
+  } catch(e) {
+    box.innerHTML = '<p class="empty">加载失败：' + escapeHtml(String(e.message || e)) + '（不影响做题）</p>';
+    $('all-count').textContent = '加载失败';
+  }
+}
+
+// 交卷后记录（挂到 grade 之后执行）
+const _origGrade = grade;
+grade = function(){
+  _origGrade();
+  const rec = {
+    ts: Date.now(),
+    score: Number($('score').textContent.split('/')[0].trim()) || 0,
+    total: Number($('score').textContent.split('/')[1].replace('分', '').trim()) || 0,
+    right: 0,
+    count: state.quiz.length,
+    wrong: []
+  };
+  // 重新算一遍，拿结构化数据
+  state.quiz.forEach((q, i) => {
+    const mine = state.answers[i] || new Set();
+    const ans = new Set(q.answer.split(''));
+    const ok = mine.size === ans.size && [...mine].every(x => ans.has(x));
+    if (ok) rec.right++;
+    else rec.wrong.push({ type: q.type, stem: q.stem, options: q.options, answer: q.answer, mine: [...mine].sort().join('') });
+  });
+  addRecord(rec);
+  reportScore(rec);
+};
+
+// 记录页事件
+$('btn-records').addEventListener('click', openRecords);
+$('btn-rec-back').addEventListener('click', () => show('view-setup'));
+$('btn-all').addEventListener('click', () => { show('view-all'); loadAllRecords(); });
+$('btn-refresh').addEventListener('click', loadAllRecords);
+$('btn-my-rec').addEventListener('click', openRecords);
+$('btn-all-back').addEventListener('click', () => show('view-setup'));
+$('btn-clear-rec').addEventListener('click', () => {
+  if (confirm('确定清空本机的做题记录吗？')){ localStorage.removeItem(REC_KEY); renderRecords(); }
+});
+(function(){
+  const nick = $('nickname');
+  if (!nick) return;
+  nick.value = localStorage.getItem(NICK_KEY) || '';
+  nick.addEventListener('input', () => localStorage.setItem(NICK_KEY, nick.value.trim()));
+})();
+
 </script>
 </body>
 </html>
