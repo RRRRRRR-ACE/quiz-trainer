@@ -419,6 +419,15 @@ function grade(){
       box.appendChild(div);
     });
   }
+  // 保存本次记录并上报
+  try {
+    const rec = {
+      ts: Date.now(), score, total, right, count: state.quiz.length,
+      wrong: wrong.map(w => ({ type: w.q.type, stem: w.q.stem, options: w.q.options, answer: w.q.answer, mine: [...w.mine].sort().join('') }))
+    };
+    addRecord(rec);
+    reportScore(rec);
+  } catch (e) { console.warn('record failed', e); }
   show('view-result');
 }
 
@@ -582,10 +591,12 @@ async function loadAllRecords(){
       try { const m = JSON.parse(line); if (m.event === 'message') msgs.push(m); } catch(e){}
     });
     const users = {};
+    let validCount = 0;
     msgs.forEach(m => {
       try {
         const d = JSON.parse(m.message);
         if (!d.c) return;
+        validCount++;
         const u = users[d.c] || (users[d.c] = { name: d.n || '匿名同学', count: 0, best: 0, last: 0, lastTs: 0, total: d.t || 0, lastTs2: 0 });
         u.count++;
         u.last = d.s;
@@ -601,7 +612,7 @@ async function loadAllRecords(){
       $('all-count').textContent = '0 人';
       return;
     }
-    $('all-count').textContent = `最近 12 小时：${list.length} 人，共 ${msgs.length} 次记录`;
+    $('all-count').textContent = `最近 12 小时：${list.length} 人，共 ${validCount} 次记录`;
     let html = '<table class="all-table"><thead><tr><th>昵称</th><th class="num">次数</th><th class="num">最高分</th><th class="num">最近一次</th></tr></thead><tbody>';
     list.forEach(u => {
       html += `<tr><td>${escapeHtml(u.name)}</td><td class="num">${u.count}</td><td class="num">${u.best}</td><td class="num">${u.last}</td></tr>`;
@@ -614,29 +625,6 @@ async function loadAllRecords(){
   }
 }
 
-// 交卷后记录（挂到 grade 之后执行）
-const _origGrade = grade;
-grade = function(){
-  _origGrade();
-  const rec = {
-    ts: Date.now(),
-    score: Number($('score').textContent.split('/')[0].trim()) || 0,
-    total: Number($('score').textContent.split('/')[1].replace('分', '').trim()) || 0,
-    right: 0,
-    count: state.quiz.length,
-    wrong: []
-  };
-  // 重新算一遍，拿结构化数据
-  state.quiz.forEach((q, i) => {
-    const mine = state.answers[i] || new Set();
-    const ans = new Set(q.answer.split(''));
-    const ok = mine.size === ans.size && [...mine].every(x => ans.has(x));
-    if (ok) rec.right++;
-    else rec.wrong.push({ type: q.type, stem: q.stem, options: q.options, answer: q.answer, mine: [...mine].sort().join('') });
-  });
-  addRecord(rec);
-  reportScore(rec);
-};
 
 // 记录页事件
 $('btn-records').addEventListener('click', openRecords);
