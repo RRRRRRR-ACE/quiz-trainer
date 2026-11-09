@@ -180,6 +180,7 @@
       <button id="btn-answers" class="ghost">答案速查（学习模式）</button>
       <button id="btn-records" class="ghost">我的记录</button>
       <button id="btn-all" class="ghost">全部记录</button>
+      <button id="btn-wrongset" class="ghost">错题集</button>
     </div>
   </section>
 
@@ -256,6 +257,17 @@
     </div>
   </section>
 
+
+  <section id="view-wrongset" class="card hidden">
+    <h2>错题集 · 按错误次数排</h2>
+    <p class="src" style="margin:-6px 0 12px" id="wrongset-count">还没有错题</p>
+    <div id="wrongset-list"></div>
+    <div class="nav">
+      <button id="btn-review-start" class="primary">开始错题复习</button>
+      <button id="btn-wrongset-back">返回设置</button>
+    </div>
+  </section>
+
   <p class="foot">人工智能训练师（四级）理论题库 · 677 道 · 本地运行，不联网</p>
 </div>
 
@@ -288,7 +300,7 @@ function updateTotal(){
   $('total').textContent = `共 ${n} 题（每题 2 分），满分 ${s} 分`;
 }
 function show(view){
-  for (const v of ['view-setup','view-quiz','view-result','view-answers','view-records','view-all']){
+  for (const v of ['view-setup','view-quiz','view-result','view-answers','view-records','view-all','view-wrongset']){
     $(v).classList.toggle('hidden', v !== view);
   }
 }
@@ -322,6 +334,9 @@ function elapsedSec(){ return startedAt ? Math.round((Date.now() - startedAt) / 
 
 function start(){
   if (!BANK.length){ alert('题库还没加载好，请稍等或刷新页面'); return; }
+  state.mode = 'exam';
+  if ($('timer')) $('timer').style.display = '';
+  if ($('btn-submit')) $('btn-submit').textContent = '交卷批阅';
   const c = counts(), p = points();
   let total = 0;
   for (const t of TYPE_ORDER) total += c[t];
@@ -345,7 +360,7 @@ function render(){
   const q = state.quiz[state.cur];
   if (!q) return;
   $('qnum').textContent = `第 ${state.cur + 1} / ${state.quiz.length} 题`;
-  $('qtype').textContent = q.type;
+  $('qtype').textContent = q.type + (state.mode === 'review' ? ' · 错题复习' : '');
   updateProgress();
   $('stem').textContent = q.stem;
 
@@ -419,8 +434,13 @@ function grade(){
     const ok = mine.size === ans.size && [...mine].every(x => ans.has(x));
     if (ok){ score += q.points; right++; } else wrong.push({i, q, mine});
   });
-  $('score').textContent = `${score} / ${total} 分`;
-  $('rate').textContent = `答对 ${right} / ${state.quiz.length} 题 · 正确率 ${Math.round(right / state.quiz.length * 100)}%`;
+  if (state.mode === 'review'){
+    $('score').textContent = '复习完成';
+    $('rate').textContent = `答对 ${right} / ${state.quiz.length} 题${wrong.length ? ' · 还有 ' + wrong.length + ' 道没掌握' : ' · 全对！'}`;
+  } else {
+    $('score').textContent = `${score} / ${total} 分`;
+    $('rate').textContent = `答对 ${right} / ${state.quiz.length} 题 · 正确率 ${Math.round(right / state.quiz.length * 100)}%`;
+  }
 
   const box = $('wrong');
   box.innerHTML = '';
@@ -450,7 +470,7 @@ function grade(){
   const duration = elapsedSec();
   try {
     const rec = {
-      ts: Date.now(), duration, score, total, right, count: state.quiz.length,
+      ts: Date.now(), duration, score, total, right, count: state.quiz.length, mode: state.mode,
       wrong: wrong.map(w => ({ type: w.q.type, stem: w.q.stem, options: w.q.options, answer: w.q.answer, mine: [...w.mine].sort().join('') }))
     };
     addRecord(rec);
@@ -588,7 +608,11 @@ function renderRecords(){
     const div = document.createElement('div');
     div.className = 'ans-item';
     const pct = rec.total ? Math.round(rec.score / rec.total * 100) : 0;
-    let html = `<div class="q"><span class="no">${arr.length - i}.</span> ${fmtTime(rec.ts)}　${rec.score} / ${rec.total} 分（${rec.right}/${rec.count} 题，${pct}%）　用时 ${fmtDur(rec.duration)}</div>`;
+    const isReview = rec.mode === 'review';
+    const scoreText = isReview
+      ? `错题复习　答对 ${rec.right}/${rec.count} 题`
+      : `${rec.score} / ${rec.total} 分（${rec.right}/${rec.count} 题，${pct}%）　用时 ${fmtDur(rec.duration)}`;
+    let html = `<div class="q"><span class="no">${arr.length - i}.</span> ${fmtTime(rec.ts)}　${scoreText}</div>`;
     html += `<div class="key">错题 ${rec.wrong.length} 道　<button class="ghost" data-idx="${i}" style="padding:2px 10px;font-size:12px">点开看错题</button></div>`;
     html += `<div class="rec-wrong hidden" id="rec-wrong-${i}">${rec.wrong.map(wrongHtml).join('') || '<p class="empty">这一轮全对</p>'}</div>`;
     div.innerHTML = html;
@@ -673,6 +697,67 @@ $('btn-clear-rec').addEventListener('click', () => {
   nick.value = localStorage.getItem(NICK_KEY) || '';
   nick.addEventListener('input', () => localStorage.setItem(NICK_KEY, nick.value.trim()));
 })();
+
+
+// ================= 错题集 / 错题复习 =================
+function buildWrongPool(){
+  const map = new Map();
+  loadRecords().forEach(rec => {
+    (rec.wrong || []).forEach(w => {
+      const key = w.stem;
+      if (!map.has(key)){
+        map.set(key, { type: w.type, stem: w.stem, options: w.options, answer: w.answer, count: 0, lastTs: 0 });
+      }
+      const item = map.get(key);
+      item.count++;
+      if ((rec.ts || 0) > item.lastTs) item.lastTs = rec.ts || 0;
+    });
+  });
+  return [...map.values()].sort((a, b) => b.count - a.count || b.lastTs - a.lastTs);
+}
+function renderWrongSet(){
+  const pool = buildWrongPool();
+  const total = pool.reduce((s, q) => s + q.count, 0);
+  $('wrongset-count').textContent = pool.length
+    ? `共 ${pool.length} 道错题，累计错了 ${total} 次（按次数从多到少排）`
+    : '还没有错题，先去做几轮吧';
+  const box = $('wrongset-list');
+  box.innerHTML = '';
+  if (!pool.length) return;
+  pool.forEach((q, i) => {
+    const div = document.createElement('div');
+    div.className = 'ans-item';
+    let html = `<div class="q"><span class="no">${i + 1}.</span>[${q.type}] ${escapeHtml(q.stem)}　<span style="color:var(--bad);font-weight:bold">错 ${q.count} 次</span></div>`;
+    for (const [letter, text] of q.options){
+      const right = q.answer.includes(letter);
+      html += `<div class="opt-line${right ? ' right' : ''}">${letter}. ${escapeHtml(text)}</div>`;
+    }
+    html += `<div class="key">答案：${q.answer}</div>`;
+    div.innerHTML = html;
+    box.appendChild(div);
+  });
+}
+function openWrongSet(){
+  renderWrongSet();
+  show('view-wrongset');
+}
+function startReview(){
+  const pool = buildWrongPool();
+  if (!pool.length){ alert('还没有错题，先做几轮再来复习'); return; }
+  state.mode = 'review';
+  state.quiz = shuffle(pool).map(q => ({ type: q.type, stem: q.stem, options: q.options, answer: q.answer, points: 0 }));
+  state.answers = {};
+  state.cur = 0;
+  stopTimer();
+  if ($('timer')) $('timer').style.display = 'none';
+  if ($('btn-submit')) $('btn-submit').textContent = '结束复习';
+  show('view-quiz');
+  render();
+}
+
+$('btn-wrongset').addEventListener('click', openWrongSet);
+$('btn-wrongset-back').addEventListener('click', () => show('view-setup'));
+$('btn-review-start').addEventListener('click', startReview);
 
 </script>
 </body>
