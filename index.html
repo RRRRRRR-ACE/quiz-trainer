@@ -151,19 +151,19 @@
     <div class="rows">
       <div class="row">
         <label>单选题</label>
-        <input type="number" id="n-single" value="20" min="0" max="999">
+        <input type="number" id="n-single" value="20" min="0" max="999" readonly>
         <span class="cap">题（每题 2 分）</span>
         <span class="avail" id="avail-single"></span>
       </div>
       <div class="row">
         <label>多选题</label>
-        <input type="number" id="n-multi" value="10" min="0" max="999">
+        <input type="number" id="n-multi" value="10" min="0" max="999" readonly>
         <span class="cap">题（每题 2 分）</span>
         <span class="avail" id="avail-multi"></span>
       </div>
       <div class="row">
         <label>判断题</label>
-        <input type="number" id="n-judge" value="20" min="0" max="999">
+        <input type="number" id="n-judge" value="20" min="0" max="999" readonly>
         <span class="cap">题（每题 2 分）</span>
         <span class="avail" id="avail-judge"></span>
       </div>
@@ -174,6 +174,7 @@
       </div>
     </div>
     <p class="total" id="total"></p>
+    <p class="src" style="margin:-8px 0 14px">题目数量已固定：单选 20、多选 10、判断 20。多选题必须全部选对才得分，少选、多选均为 0 分。</p>
     <div class="nav">
       <button id="btn-start" class="primary">开始答题</button>
       <button id="btn-answers" class="ghost">答案速查（学习模式）</button>
@@ -275,7 +276,7 @@ function shuffle(arr){
   return a;
 }
 function counts(){
-  return {'单选题': +$('n-single').value || 0, '多选题': +$('n-multi').value || 0, '判断题': +$('n-judge').value || 0};
+  return {'单选题': 20, '多选题': 10, '判断题': 20};
 }
 function points(){
   return {'单选题': 2, '多选题': 2, '判断题': 2};
@@ -387,6 +388,14 @@ function render(){
       label.appendChild(rb); label.appendChild(span); box.appendChild(label);
     }
   }
+  if (q.type === '多选题'){
+    const tip = document.createElement('p');
+    tip.className = 'src';
+    tip.style.cssText = 'margin:12px 0 0; color:var(--bad); font-size:13px';
+    tip.textContent = '多选题：少选、多选都不得分，必须全部选对才给分';
+    box.appendChild(tip);
+  }
+
   $('btn-prev').disabled = state.cur === 0;
   $('btn-next').disabled = state.cur >= state.quiz.length - 1;
 }
